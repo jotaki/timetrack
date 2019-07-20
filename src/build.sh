@@ -6,6 +6,7 @@ sources=(
     bash/header.sh
     bash/env.sh
     bash/sql.sh
+    bash/sqlmig.sh
     bash/main.sh
 )
 
