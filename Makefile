@@ -7,8 +7,8 @@ testdb:
 
 timetrack:
 	@make -C src
-	@cp -vf src/timetrack.sh ./timetrack
+	@cp -vf src/timetrack.sh bin/timetrack
 	@make -C src clean
 
 clean:
-	@rm -fv timetrack
+	@rm -fv bin/timetrack
