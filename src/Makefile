@@ -2,4 +2,4 @@ all:
 	@./build.sh
 
 clean:
-	rm -f timetrack.sh
+	@rm -vf timetrack.sh
