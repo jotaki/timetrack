@@ -27,7 +27,7 @@ SQL_PARAMS=""
 ###
 # sql.sh: wrapper code for sql
 
-sqlblock(){ $SQL_ENGINE $SQL_PARAMS "$TIMETRACK_DB_PATH" $* 2>/dev/null;}
+sqlblock(){ $SQL_ENGINE $SQL_PARAMS $* "$TIMETRACK_DB_PATH" 2>/dev/null;}
 
 initdb() {
     sqlblock <<- EOF 2>/dev/null
@@ -140,7 +140,7 @@ EOF
 }
 
 showreport() {
-    sqlblock -column -header "select * from timereport;";
+    sqlblock -column -header <<< "select * from timereport;";
 }
 
 sqlsanitize(){ [ ! -z "$1" ] && sed s:\':\\\\\':g <<< "$1";}
