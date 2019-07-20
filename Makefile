@@ -11,4 +11,4 @@ timetrack:
 	@make -C src clean
 
 clean:
-	@echo "Not Applicable!"
+	@rm -fv timetrack
