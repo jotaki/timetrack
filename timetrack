@@ -1,0 +1,232 @@
+#! /bin/bash
+# timetrack.sh: time tracking
+
+# Default database path (you should not need to change this.)
+TIMETRACK_DBPATH="$HOME/.timetrackdb"
+
+###
+# env.sh: environment variables 
+# General config options that could be changed by a human (maybe)
+
+# database path
+TIMETRACK_DB_PATH="${TIMETRACK_DB_PATH:-"$TIMETRACK_DBPATH"}"
+
+# timetrack user
+TIMETRACK_USER=${TIMETRACK_USER:-$USER}
+TIMETRACK_USER=${TIMETRACK_USER:-$(id -g 2>/dev/null || echo -n "tt-user")}
+
+# timetrack project
+TIMETRACK_PROJECT="${TIMETRACK_PROJECT:-}"
+
+# sql engine
+SQL_ENGINE="${SQL_PATH:-$(which sqlite3 2>/dev/null)}"
+SQL_ENGINE="${SQL_ENGINE:-/usr/bin/sqlite3}"
+
+# any necessary parameters.
+SQL_PARAMS=""
+###
+# sql.sh: wrapper code for sql
+
+sqlblock(){ $SQL_ENGINE $SQL_PARAMS "$TIMETRACK_DB_PATH" $* 2>/dev/null;}
+
+initdb() {
+    sqlblock <<- EOF 2>/dev/null
+
+/*
+table structure:
+
+|users  |  |projects |  |timekeepings                                      |
+|id|name|  |id|name  |  |id|project_id|user_id|activity|start_time|end_time|
+ ^^     ^^--------------^^     ^^
+  \\----------------------------------//
+*/
+
+-- create tables --
+
+-- users table, this is probably pointless as timetrack intends to be a one-user database.
+create table if not exists users (
+    id integer primary key autoincrement,
+    name varchar(255) not null unique,
+    created_at datetime not null default current_timestamp
+);
+
+-- projects table
+create table if not exists projects (
+    id integer primary key autoincrement,
+    name varchar(255) not null unique,
+    created_at datetime not null default current_timestamp
+);
+
+-- actual time keeping table
+create table if not exists timekeepings (
+    id integer primary key autoincrement,
+    project_id integer not null,
+    user_id integer not null,
+    activity varchar(255) not null,
+    start_time datetime not null default current_timestamp,
+    end_time datetime not null default 0,
+
+    -- foreign key references
+    foreign key(project_id) references projects(id),
+    foreign key(user_id) references users(id)
+);
+
+-- meta data table
+-- this table is used to deal with any migration issues.
+create table if not exists ttmetas (
+    id integer primary key autoincrement,
+    version integer not null default 1,
+    reserved blob
+);
+
+-- create views. --
+
+create view if not exists timekeep (projectname, username, activity) as
+    select p.name, u.name, tk.activity from
+        timekeepings tk, users u, projects p
+        where
+            tk.project_id = p.id and
+            tk.user_id = u.id;
+
+create view if not exists timereport (projectname, username, activity, 
+                                  timedays, timehours, timeminutes, timeseconds) as
+    select p.name, u.name, tk.activity,
+        cast ((julianday(tk.end_time) - julianday(start_time)) as integer), -- XXX: this logic is probably wonky.
+        cast ((julianday(tk.end_time) - julianday(start_time)) * 24 as integer),
+        cast ((julianday(tk.end_time) - julianday(start_time)) * 1440 % 60 as integer),
+        cast ((julianday(tk.end_time) - julianday(start_time)) * 86400 % 60 as integer) 
+        from timekeepings tk, users u, projects p
+        where
+            tk.project_id = p.id and
+            tk.user_id = u.id and
+            tk.end_time != 0
+        order by
+            p.name, u.name;
+
+-- create triggers --
+
+/* shuffle timestamps on insert */
+create trigger if not exists tg_insert_timekeepings
+  after insert on timekeepings
+  begin
+    update timekeepings
+      set end_time = NEW.start_time
+      where
+        timekeepings.end_time = 0 and
+        timekeepings.id != NEW.id and
+        timekeepings.user_id = NEW.user_id;
+  end;
+
+/* easily work with users, projects, and timekeepings table */
+create trigger if not exists tg_insert_timekeep
+  instead of insert on timekeep
+  begin
+    insert or ignore into users (name) values (NEW.username);
+    insert or ignore into projects (name) VALUES (new.projectname);
+    insert into timekeepings (project_id, user_id, activity) values (
+        (select id from projects where name = NEW.projectname),
+        (select id from users where name = NEW.username),
+        NEW.activity
+    );
+  end
+EOF
+}
+
+trackit() {
+    sqlblock <<- EOF 2>/dev/null
+        insert into timekeep (username, projectname, activity) values
+            ('$1', '$2', '$3');
+EOF
+}
+
+showreport() {
+    sqlblock -column -header "select * from timereport;";
+}
+
+sqlsanitize(){ [ ! -z "$1" ] && sed s:\':\\\\\':g <<< "$1";}
+###
+# main.sh: usage and invocation
+
+usage() {
+    cat <<-EOF
+usage: $0 [options] <activity description>
+  -h          print usage and exit
+
+  -s          read <activity description> from stdin
+
+  -r          show report
+
+  -p name     set project name to name ($TIMETRACK_PROJECT)
+              environment variable: TIMETRACK_PROJECT
+
+  -u name     set username to name ($TIMETRACK_USER)
+              environment variable: TIMETRACK_USER
+
+  -d path     set database file path to path ($TIMETRACK_DB_PATH)
+              environment variable: TIMETRACK_DB_PATH
+
+  command line options override environment settings.
+
+  <activity description> should be a breif description of what you
+  are working on for a given project.
+
+    TIMETRACK_PROJECT (-p) cannot be blank.
+    TIMETRACK_USER defaults to \$USER ($USER), id -g ($(id -g)), or 'tt-user'
+EOF
+}
+
+app="$(basename "$0")";
+use_stdin=0
+while getopts d:hp:ru:s opt; do
+    case "$opt" in
+        d) TIMETRACK_DB_PATH="$OPTARG" ;;
+        h) usage "$app"; exit 0 ;;
+        p) TIMETRACK_PROJECT="$OPTARG" ;;
+        r) showreport; exit 0 ;;
+        u) TIMETRACK_USER="$OPTARG" ;;
+        s) use_stdin=1 ;;
+        ?) usage "$app"; exit 1 ;;
+    esac
+done
+
+TIMETRACK_PROJECT="$(sqlsanitize "$TIMETRACK_PROJECT")"
+TIMETRACK_USER="$(sqlsanitize "$TIMETRACK_USER")"
+
+if [ $use_stdin -eq 1 -a ! -z "$TIMETRACK_PROJECT" ]; then
+    echo "enter brief description. send EOF (press Ctrl-D) when done."
+    while read -p '> ' line; do activity="${activity} ${line}"; done
+    unset line
+fi
+
+shift $(($OPTIND - 1))
+if [ -z "$*" -a $use_stdin -ne 1 ]; then
+    usage "$app"
+    exit 1
+fi
+
+activity="$(sqlsanitize "${activity:-$*}")"
+
+if [ -z "$activity" -o -z "$TIMETRACK_USER" -o -z "$TIMETRACK_PROJECT" ]; then
+    usage "$app"
+    exit 1
+fi
+
+if [ ! -f "$TIMETRACK_DB_PATH" ]; then
+    echo -n "$TIMETRACK_DB_PATH does not exist, attempting to create it ... "
+    initdb
+
+    if [ $? -ne 0 ]; then
+        echo "failed"
+        exit 1
+    fi
+
+    echo "success"
+fi
+
+echo -n "updating table ... "
+trackit "$TIMETRACK_USER" "$TIMETRACK_PROJECT" "$activity"
+if [ $? -ne 0 ]; then
+    echo "failed"
+    exit 1;
+fi
+echo "ok"
