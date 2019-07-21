@@ -8,9 +8,10 @@ testdb:
 timetrack:
 	@make -C src
 	@cp -vf src/timetrack.sh bin/timetrack
-	@make -C src clean
+	@ln -sf bin/timetrack timetrack
 
 clean:
+	@make -C src clean
 	@rm -fv bin/timetrack
 
 reset: clean timetrack
