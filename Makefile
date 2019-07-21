@@ -12,6 +12,6 @@ timetrack:
 
 clean:
 	@make -C src clean
-	@rm -fv bin/timetrack
+	@rm -fv bin/timetrack timetrack
 
 reset: clean timetrack
