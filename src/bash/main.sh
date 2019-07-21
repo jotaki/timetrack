@@ -68,19 +68,25 @@ fi
 if [ ! -f "$TIMETRACK_DB_PATH" ]; then
     echo -n "$TIMETRACK_DB_PATH does not exist, attempting to create it ... "
     initdb
+    chkfail || exit 1
+elif ! chkversion; then
+    cwarn warning: "schema version mismatch, please use -M to migrate"
+    cwarn warning: "expected schema version $MIGTO, got version $(getversion)\n"
+    cwarn warning: "timetrack will attempt to do the intended task, but"
+    cwarn warning: "the results may be undefined. For this reason it is"
+    cwarn warning: "recommended that you make a backup before performing"
+    cwarn warning: "the intended task.\n"
 
-    if [ $? -ne 0 ]; then
-        echo "failed"
+    cmsg -n question: "Would you like to create a backup? "
+    if ! chkyninput y; then
+        cwarn warning: "timetrack was informed not to make a backup"
+        cwarn warning: "${ATTR_EHILITE}YOU HAVE BEEN WARNED !!!${ATTR_NORMAL}"
+    elif ! sqlbackup; then
+        cerr error: "unable to create backup, aborting."
         exit 1
     fi
-
-    echo "success"
 fi
 
-echo -n "updating table ... "
+cmsg -n status: "updating table ..."
 trackit "$TIMETRACK_USER" "$TIMETRACK_PROJECT" "$activity"
-if [ $? -ne 0 ]; then
-    echo "failed"
-    exit 1;
-fi
-echo "ok"
+chkfail || exit 1

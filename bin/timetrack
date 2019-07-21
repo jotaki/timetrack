@@ -25,6 +25,102 @@ SQL_ENGINE="${SQL_ENGINE:-/usr/bin/sqlite3}"
 # any necessary parameters.
 SQL_PARAMS=""
 ###
+# misc.sh: miscellaneous functions
+
+# default=$1
+chkyninput() {
+    local b=$ATTR_BOLD n=$ATTR_NORMAL
+    local answer=$(tr [YN] [yn] <<< "$1") msg="[${b}Y${n}/n]"
+    test "$answer" = "y" || msg="[y/${b}N${n}]"
+
+    echo -n " $msg "
+    builtin read -N 1 answer
+    echo
+
+    answer="$(tr [YN] [yn] <<< "$answer")"
+    test "${answer:-$1}" = "$1"
+}
+###
+# colors.sh: support for colors
+
+ctransform(){ echo -en "$*" | tr a-z A-Z; }
+cmsgwrap() {
+    local ansi="$1" prefix="$2" opt="-e"
+    test "$prefix" = "-n" && shift && opt="-en" && prefix="$2"
+    prefix="$(ctransform "$prefix")"
+    shift 2
+    echo $opt "${ansi}${prefix}${ATTR_NORMAL} $*"
+}
+
+cerr(){ cmsgwrap $ATTR_EHILITE $*; }
+cwarn(){ cmsgwrap $ATTR_WHILITE $*; }
+cmsg(){ cmsgwrap $ATTR_NHILITE $*; }
+
+chkfail() {
+    local rc=$?
+    test $rc -eq 0 && cmsg "ok" || cerr "failed"
+    return $rc
+}
+
+# yes, I know the correct spelling is highlight.
+ATTR_EHILITE=""
+ATTR_WHILITE=""
+ATTR_NHILITE=""
+
+ATTR_CBLACK=""
+ATTR_CRED=""
+ATTR_CGREEN=""
+ATTR_CYELLOW=""
+ATTR_CBLUE=""
+ATTR_CMAGENTA=""
+ATTR_CCYAN=""
+ATTR_CWHITE=""
+ATTR_NORMAL=""
+ATTR_BOLD=""
+
+ansi_bold(){ echo -en "${ATTR_BOLD}";}
+ansi_red(){ echo -en "${ATTR_CRED}";}
+ansi_green(){ echo -en "${ATTR_CGREEN}";}
+ansi_red(){ echo -en "${ATTR_CRED}";}
+ansi_green(){ echo -en "${ATTR_CGREEN}";}
+ansi_yellow(){ echo -en "${ATTR_CYELLOW}";}
+ansi_blue(){ echo -en "${ATTR_CBLUE}";}
+ansi_magenta(){ echo -en "${ATTR_CMAGENTA}";}
+ansi_cyan(){ echo -en "${ATTR_CCYAN}";}
+ansi_white(){ echo -en "${ATTR_CWHITE}";}
+ansi_normal(){ echo -en "${ATTR_NORMAL}";}
+
+# call this function to enable color support.
+enable_color_support(){
+    test -t 1 || return $?
+    test -x "$(which tput)" || return $?
+    local colors=$(tput colors)
+    test "${colors:-0}" -ge 8 || return $?
+
+    # see terminfo(5)
+    ATTR_BOLD="$(tput bold)"
+    ATTR_NORMAL="$(tput sgr0)"  # exit_attribute_mode
+    ATTR_CBLACK="$(tput setaf 0)"
+    ATTR_CRED="$(tput setaf 1)"       # blue?
+    ATTR_CGREEN="$(tput setaf 2)"
+    ATTR_CYELLOW="$(tput setaf 3)"    # cyan?
+    ATTR_CBLUE="$(tput setaf 4)"      # red?
+    ATTR_CMAGENTA="$(tput setaf 5)"
+    ATTR_CCYAN="$(tput setaf 6)"      # yellow?
+    ATTR_CWHITE="$(tput setaf 7)"
+
+    ATTR_EHILITE="${ATTR_BOLD}${ATTR_CRED}"
+    ATTR_WHILITE="${ATTR_BOLD}${ATTR_CYELLOW}"
+    ATTR_NHILITE="${ATTR_BOLD}${ATTR_CGREEN}"
+
+    # redefine ctransform
+    unset -f ctransform
+    ctransform(){ echo -en "$*";}
+}
+
+# called now.
+enable_color_support
+###
 # sql.sh: wrapper code for sql
 
 sqlblock(){ $SQL_ENGINE $SQL_PARAMS $* "$TIMETRACK_DB_PATH" 2>/dev/null;}
@@ -143,7 +239,53 @@ showreport() {
     sqlblock -column -header <<< "select * from timereport;";
 }
 
-sqlsanitize(){ [ ! -z "$1" ] && sed s:\':\\\\\':g <<< "$1";}
+sqlsanitize(){ test -z "$1" || sed -e s/\'/\&\&/g <<< "$1";}
+
+getversion() {
+    local version=$(sqlblock <<< "select version from ttmetas;");
+    echo "${version:-0}"
+}
+###
+# sqlmig.sh: sql migration
+
+MIGFROM=0
+MIGTO=1
+sqlmigrate() {
+    sqlblock <<- EOF 2>/dev/null
+<SQL.MIGRATE>
+EOF
+}
+
+chkversion(){ test $(getversion) -eq $MIGTO;}
+
+sqlbackup() {
+    local v="sv$(getversion)" dbpath="$TIMETRACK_DB_PATH"
+    local bkup_path="${dbpath}.${v}.$(date +%s)" bkup=
+
+    cmsg backup: "please enter backup path"
+    read -p "[${ATTR_BOLD}${ATTR_CCYAN}$bkup_path${ATTR_NORMAL}] " bkup
+    test -z "$bkup" || bkup_path="$bkup"
+    cmsg backup:; cp -v "$dbpath" "$bkup_path" || return $?
+
+    cmsg backup: "performing integrity check"
+
+    ansi_yellow
+    sha512sum "$dbpath" "$bkup_path" | tee "$bkup_path.sha" | \
+        sed -E 's/^(.{24}).{80}(.{24}) *(.*)$/\1...\2    \3/g' | \
+        sed -e s/.*/${ATTR_NHILITE}backup:\ ${ATTR_NORMAL}${ATTR_CYELLOW}\&/
+    ansi_normal
+
+    sha512sum -c "$bkup_path.sha" 2>/dev/null | \
+        sed -e s/.*/${ATTR_NHILITE}backup:\ ${ATTR_NORMAL}\&/ \
+            -e s/OK/${ATTR_CGREEN}\&${ATTR_NORMAL}/ \
+            -e s/FAILED/${ATTR_CRED}\&${ATTR_NORMAL}/
+
+    v=$(sed -E 's/^(.{128}).*$/\1/' "$bkup_path.sha" | uniq | wc -l)
+
+    cmsg -n backup: "verifying..."
+    test "$v" -eq 1
+    chkfail
+}
 ###
 # main.sh: usage and invocation
 
@@ -214,19 +356,25 @@ fi
 if [ ! -f "$TIMETRACK_DB_PATH" ]; then
     echo -n "$TIMETRACK_DB_PATH does not exist, attempting to create it ... "
     initdb
+    chkfail || exit 1
+elif ! chkversion; then
+    cwarn warning: "schema version mismatch, please use -M to migrate"
+    cwarn warning: "expected schema version $MIGTO, got version $(getversion)\n"
+    cwarn warning: "timetrack will attempt to do the intended task, but"
+    cwarn warning: "the results may be undefined. For this reason it is"
+    cwarn warning: "recommended that you make a backup before performing"
+    cwarn warning: "the intended task.\n"
 
-    if [ $? -ne 0 ]; then
-        echo "failed"
+    cmsg -n question: "Would you like to create a backup? "
+    if ! chkyninput y; then
+        cwarn warning: "timetrack was informed not to make a backup"
+        cwarn warning: "${ATTR_EHILITE}YOU HAVE BEEN WARNED !!!${ATTR_NORMAL}"
+    elif ! sqlbackup; then
+        cerr error: "unable to create backup, aborting."
         exit 1
     fi
-
-    echo "success"
 fi
 
-echo -n "updating table ... "
+cmsg -n status: "updating table ..."
 trackit "$TIMETRACK_USER" "$TIMETRACK_PROJECT" "$activity"
-if [ $? -ne 0 ]; then
-    echo "failed"
-    exit 1;
-fi
-echo "ok"
+chkfail || exit 1
