@@ -39,3 +39,25 @@ sqlbackup() {
     test "$v" -eq 1
     chkfail
 }
+
+sqlchkversion() {
+    chkversion && return $?
+
+    cwarn warning: "schema version mismatch, please use -M to migrate"
+    cwarn warning: "expected schema version $MIGTO, got version $(getversion)\n"
+    cwarn warning: "timetrack will attempt to do the intended task, but"
+    cwarn warning: "the results may be undefined. For this reason it is"
+    cwarn warning: "recommended that you make a backup before performing"
+    cwarn warning: "the intended task.\n"
+
+    cmsg -n question: "Would you like to create a backup? "
+    if ! chkyninput y; then
+        cwarn warning: "timetrack was informed not to make a backup"
+        cwarn warning: "${ATTR_EHILITE}YOU HAVE BEEN WARNED !!!${ATTR_NORMAL}"
+    elif ! sqlbackup; then
+        cerr error: "unable to create backup, aborting."
+        return 1
+    fi
+
+    return 0
+}
