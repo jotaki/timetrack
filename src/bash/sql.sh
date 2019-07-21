@@ -20,7 +20,7 @@ showreport() {
     sqlblock -column -header <<< "select * from timereport;";
 }
 
-sqlsanitize(){ [ ! -z "$1" ] && sed s:\':\\\\\':g <<< "$1";}
+sqlsanitize(){ test -z "$1" || sed -e s/\'/\&\&/g <<< "$1";}
 
 getversion() {
     local version=$(sqlblock <<< "select version from ttmetas;");
