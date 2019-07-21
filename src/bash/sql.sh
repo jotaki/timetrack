@@ -21,3 +21,8 @@ showreport() {
 }
 
 sqlsanitize(){ [ ! -z "$1" ] && sed s:\':\\\\\':g <<< "$1";}
+
+getversion() {
+    local version=$(sqlblock <<< "select version from ttmetas;");
+    echo "${version:-0}"
+}
