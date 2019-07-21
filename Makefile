@@ -12,3 +12,5 @@ timetrack:
 
 clean:
 	@rm -fv bin/timetrack
+
+reset: clean timetrack
