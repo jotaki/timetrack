@@ -160,8 +160,39 @@ insert into ttchangelogs (version_id, devname, object_type, object, description)
 create view new_task (username, projectname, projectdescription, taskname, description, future) as
     select 0, 0, 0, 0, 0, 0;
 
+create view tag_task (taskname, tagname) as select 0, 0;
+create view tag_project (projectname, tagname) as select 0, 0;
+
 -- time to setup new triggers
 -- this setup is to get around sqlite not supporting procedures.
+create trigger if not exists tg_insert_tag_project
+  instead of insert on tag_project
+  begin
+    insert or ignore into projects (name) values (NEW.projectname);
+    insert into taglog (project_id, tag_id) values (
+        (select id from projects where name = NEW.projectname),
+        (select id from tags where name = NEW.tagname)
+    );
+  end;
+
+insert into ttchangelogs (version_id, devname, object_type, object, description) values
+    ((select id from ttmetas where version = 1 limit 1), 'jk', 'trigger', 'tg_insert_tag_project',
+        'insert into tag_project to tag a project. columns are projectname and tagname.');
+
+create trigger if not exists tg_insert_tag_task
+  instead of insert on tag_task
+  begin
+    insert or ignore into tags (name) values (NEW.tagname);
+    insert into taglog (task_id, tag_id) values (
+        (select id from tasks where shortname = NEW.taskname),
+        (select id from tags where name = NEW.tagname)
+    );
+  end;
+
+insert into ttchangelogs (version_id, devname, object_type, object, description) values
+    ((select id from ttmetas where version = 1 limit 1), 'jk', 'trigger', 'tg_insert_tag_task',
+        'insert into tag_task to tag a task. columns are taskname and tagname.');
+
 create trigger if not exists tg_insert_new_task
   instead of insert on new_task
   begin
@@ -392,3 +423,13 @@ create view if not exists _projects (username, projectname, projectdescription, 
 insert into ttchangelogs (version_id, devname, object_type, object, description) values
     ((select id from ttmetas where version = 1 limit 1), 'jk', 'view', '_projects',
         'a _projects wrapper view around projectlog and projects');
+
+create view if not exists _tags (projectname, taskdescription, tagname) as
+    select p.name, task.description, tag.name from taglog tl
+        left outer join projects p on p.id = tl.project_id
+        left outer join tasks task on task.id = tl.task_id
+        left outer join tags tag on tag.id = tl.tag_id;
+
+insert into ttchangelogs (version_id, devname, object_type, object, description) values
+    ((select id from ttmetas where version = 1 limit 1), 'jk', 'view', '_tags',
+        'a _tags wrapper view around taglog');
