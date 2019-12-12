@@ -30,3 +30,6 @@ usage: ./timetrack [options] <activity description>
     TIMETRACK_PROJECT (-p) cannot be blank.
     TIMETRACK_USER defaults to $USER (user), id -g (1000), or 'tt-user'
 ```
+
+## Work in progress
+Could've swore I had the migration system working, apparently not. I am working on fixing that now.
