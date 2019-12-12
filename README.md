@@ -33,3 +33,7 @@ usage: ./timetrack [options] <activity description>
 
 ## Work in progress
 Could've swore I had the migration system working, apparently not. I am working on fixing that now.
+This project is a bit complicated, and haven't worked on it in some months, it may be a minute before I finish "fixing" the -M.
+
+Note: This project uses triggers on views to emulate procedures, since sqlite doesn't support
+procedures directly.
