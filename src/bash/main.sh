@@ -54,7 +54,7 @@ EOF
 app="$(basename "$0")";
 use_stdin=0
 runmode='updateproject'
-while getopts d:hp:rst:T:u: opt; do
+while getopts d:hMp:rst:T:u: opt; do
     case "$opt" in
         d) TIMETRACK_DB_PATH="$OPTARG" ;;
         e) use_stdin=2 ;;

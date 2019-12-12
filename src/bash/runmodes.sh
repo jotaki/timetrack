@@ -31,6 +31,12 @@ updateproject() {
 }
 
 migration() {
+    chkdb
+
+    cmsg -n status: "Migrating database ... "
+    sqlmigrate
+    chkfail || return $?
+    return 0
 }
 
 query() {

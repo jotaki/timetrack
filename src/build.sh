@@ -9,6 +9,7 @@ sources=(
     bash/colors.sh
     bash/sql.sh
     bash/sqlmig.sh
+    bash/runmodes.sh
     bash/main.sh
 )
 
@@ -30,10 +31,16 @@ chkstatus(){
 : 'Removing old script' \rm  -f "$output"
 : 'Creating new script' \cat ${sources[@]} "> '$output'"
 
-echo -n 'Injecting sql ... '
+echo -n 'Injecting init sql ... '
 \sed -i -e '/<SQL.INIT>/{
     s/<SQL.INIT>//g
     r sql/new.sql
+}' "$output"
+chkstatus
+echo -n 'Injecting migration sql ... '
+\sed -i -e '/<SQL.MIGRATE>/{
+    s/<SQL.MIGRATE//g
+    r sql/migration.sql
 }' "$output"
 chkstatus
 
