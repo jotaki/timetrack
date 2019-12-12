@@ -40,6 +40,25 @@ chkyninput() {
     answer="$(tr [YN] [yn] <<< "$answer")"
     test "${answer:-$1}" = "$1"
 }
+
+center_text() {
+    local cols=$(tput cols 2>/dev/null) opts="-e" txt=;
+    if test "$1" = "-n"; then
+        opts="-en";
+        shift;
+    fi
+
+    if ! test -n "$cols"; then
+        echo $opts "\t\t$*";
+        return 1;
+    fi
+
+    txt="$*";
+    cols=$(($cols / 2));
+    cols=$(($cols - $((${#txt} / 2))));
+    tput cuf $cols;
+    echo $opts "$*";
+}
 ###
 # colors.sh: support for colors
 
@@ -312,13 +331,32 @@ sqlchkversion() {
 # main.sh: usage and invocation
 
 usage() {
+    center_text "${ATTR_BOLD}timetracker${ATTR_NORMAL}";
+    center_text "${ATTR_CYELLOW}schema version $MIGTO${ATTR_NORMAL}";
     cat <<-EOF
-usage: $0 [options] <activity description>
+
+usage: $0 [options] <text>
   -h          print usage and exit
 
-  -s          read <activity description> from stdin
+  -s          read <text> from stdin
 
-  -r          show report
+  -e          use <text> inserted text from \$EDITOR ($EDITOR)
+
+  -M          migrate scehma from version $MIGFROM to version $MIGTO
+              Only use this option if you are informed to do so.
+
+  -r          show report (equivalent to $0 -q _tasks)
+
+  -q          equivalent to select * from <text>;
+              useful views: _tasks, _projects, _tags,
+              active_tasks, active_projects
+
+  -t task     create <text> as task description for task
+              switches current task to specified task
+              environment variable: TIMETRACK_TASK ($TIMETRACK_TASK)
+
+  -T tag(s)   a comma separated list of tags ($TIMETRACK_TAGS)
+              environment variable: TIMETRACK_TAGS
 
   -p name     set project name to name ($TIMETRACK_PROJECT)
               environment variable: TIMETRACK_PROJECT
@@ -329,34 +367,48 @@ usage: $0 [options] <activity description>
   -d path     set database file path to path ($TIMETRACK_DB_PATH)
               environment variable: TIMETRACK_DB_PATH
 
+  -z          mark all active tasks in project (-p) to inactive.
+              the project is also marked as inactive.
+
   command line options override environment settings.
 
-  <activity description> should be a breif description of what you
-  are working on for a given project.
-
-    TIMETRACK_PROJECT (-p) cannot be blank.
+    for most tasks TIMETRACK_PROJECT (-p) cannot be blank.
     TIMETRACK_USER defaults to \$USER ($USER), id -g ($(id -g)), or 'tt-user'
+    TIMETRACK_TAGS defaults to an empty string
+
+  see timetracker(1) for more details.
 EOF
 }
 
 app="$(basename "$0")";
 use_stdin=0
-while getopts d:hp:ru:s opt; do
+runmode='updateproject'
+while getopts d:hp:rst:T:u: opt; do
     case "$opt" in
         d) TIMETRACK_DB_PATH="$OPTARG" ;;
+        e) use_stdin=2 ;;
         h) usage "$app"; exit 0 ;;
+        M) runmode='migration' ;;
         p) TIMETRACK_PROJECT="$OPTARG" ;;
-        r) sqlchkversion && showreport; exit 0 ;;
-        u) TIMETRACK_USER="$OPTARG" ;;
+        q) runmode='query' ;;
+        r) runmode='showreport' ;;
         s) use_stdin=1 ;;
+        t) TIMETRACK_TASK="$OPTARG";
+           runmode='addtask' ;;
+        T) TIMETRACK_TAGS="$OPTARG" ;;
+        u) TIMETRACK_USER="$OPTARG" ;;
         ?) usage "$app"; exit 1 ;;
     esac
 done
 
 TIMETRACK_PROJECT="$(sqlsanitize "$TIMETRACK_PROJECT")"
 TIMETRACK_USER="$(sqlsanitize "$TIMETRACK_USER")"
+TIMETRACK_TAGS="$(sqlsanitize "$TIMETRACK_TAGS")"
+TIMETRACK_TASK="$(sqlsanitize "$TIMETRACK_TASK")"
 
-if [ $use_stdin -eq 1 -a ! -z "$TIMETRACK_PROJECT" ]; then
+exit 0;
+
+if [ $use_stdin -eq 1 -a -n "$TIMETRACK_PROJECT" ]; then
     echo "enter brief description. send EOF (press Ctrl-D) when done."
     while read -p '> ' line; do activity="${activity} ${line}"; done
     unset line

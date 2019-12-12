@@ -16,13 +16,20 @@ trackit() {
 EOF
 }
 
-showreport() {
-    sqlblock -column -header <<< "select * from timereport;";
-}
-
 sqlsanitize(){ test -z "$1" || sed -e s/\'/\&\&/g <<< "$1";}
 
 getversion() {
     local version=$(sqlblock <<< "select version from ttmetas;");
     echo "${version:-0}"
+}
+
+chkdb() {
+    if ! test -f "$TIMETRACK_DB_PATH"; then
+        echo -n "$TIMETRACK_DB_PATH does not exist, attempting to create it ... ";
+        tput cuf 1 2>/dev/null
+        initdb
+        chkfail || return $?;
+    fi
+
+    return 0;
 }
