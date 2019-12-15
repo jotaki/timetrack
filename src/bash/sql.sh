@@ -29,6 +29,9 @@ chkdb() {
         tput cuf 1 2>/dev/null
         initdb
         chkfail || return $?;
+        # XXX: HACK: v1 is the initial version, so we`ll migrate now.
+        sqlmigrate
+        chkfail || return $?
     fi
 
     return 0;

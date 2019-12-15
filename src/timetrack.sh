@@ -204,7 +204,7 @@ table structure:
 
 |users  |  |projects |  |timekeepings                                      |
 |id|name|  |id|name  |  |id|project_id|user_id|activity|start_time|end_time|
- ^^     ^^--------------^^     ^^
+ ^^         ^^--------------^^         ^^
   \\----------------------------------//
 */
 
@@ -296,6 +296,7 @@ create trigger if not exists tg_insert_timekeep
         NEW.activity
     );
   end
+
 EOF
 }
 
@@ -319,6 +320,9 @@ chkdb() {
         tput cuf 1 2>/dev/null
         initdb
         chkfail || return $?;
+        # XXX: HACK: v1 is the initial version, so we`ll migrate now.
+        sqlmigrate
+        chkfail || return $?
     fi
 
     return 0;
@@ -330,7 +334,7 @@ MIGFROM=0
 MIGTO=1
 sqlmigrate() {
     sqlblock <<- EOF 2>/dev/null
->
+
 -- ttmetas
 alter table ttmetas add column description varchar(255);
 insert into ttmetas (version, description) values (1, 'Big improvements - see changelog.');
@@ -360,7 +364,7 @@ insert into ttchangelogs (version_id, devname, description, object_type, object)
 create table if not exists tasks (
     id integer primary key autoincrement,
     description blob not null unique,
-    shortname varchar(255) unique,     -- should default to task#id if not specified.
+    shortname varchar(255) unique,     -- should default to task.id if not specified.
     created_at datetime not null default current_timestamp
 );
 insert into ttchangelogs (version_id, devname, description, object_type, object) values
@@ -854,8 +858,6 @@ updateproject() {
 }
 
 migration() {
-    chkdb
-
     cmsg -n status: "Migrating database ... "
     sqlmigrate
     chkfail || return $?
@@ -997,9 +999,7 @@ chkdb || exit 1;
 test "$runmode" = "migration" || sqlchkversion || exit 1;
 eval $runmode "$*"
 
-test -n "$TIMETRACK_PROJECT" || 
-
-exit 0;
+test -n "$TIMETRACK_PROJECT" || exit 0;
 
 if [ $use_stdin -eq 1 -a -n "$TIMETRACK_PROJECT" ]; then
     echo "enter brief description. send EOF (press Ctrl-D) when done."
@@ -1019,11 +1019,7 @@ if [ -z "$activity" -o -z "$TIMETRACK_USER" -o -z "$TIMETRACK_PROJECT" ]; then
     exit 1
 fi
 
-if [ ! -f "$TIMETRACK_DB_PATH" ]; then
-    echo -n "$TIMETRACK_DB_PATH does not exist, attempting to create it ... "
-    initdb
-    chkfail || exit 1
-fi
+chkdb || exit 1
 
 sqlchkversion || exit 1
 

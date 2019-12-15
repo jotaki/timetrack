@@ -82,9 +82,7 @@ chkdb || exit 1;
 test "$runmode" = "migration" || sqlchkversion || exit 1;
 eval $runmode "$*"
 
-test -n "$TIMETRACK_PROJECT" || 
-
-exit 0;
+test -n "$TIMETRACK_PROJECT" || exit 0;
 
 if [ $use_stdin -eq 1 -a -n "$TIMETRACK_PROJECT" ]; then
     echo "enter brief description. send EOF (press Ctrl-D) when done."
@@ -104,11 +102,7 @@ if [ -z "$activity" -o -z "$TIMETRACK_USER" -o -z "$TIMETRACK_PROJECT" ]; then
     exit 1
 fi
 
-if [ ! -f "$TIMETRACK_DB_PATH" ]; then
-    echo -n "$TIMETRACK_DB_PATH does not exist, attempting to create it ... "
-    initdb
-    chkfail || exit 1
-fi
+chkdb || exit 1
 
 sqlchkversion || exit 1
 

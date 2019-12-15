@@ -10,10 +10,9 @@ sources=(
     bash/sql.sh
     bash/sqlmig.sh
     bash/runmodes.sh
-    bash/main.sh
 )
 
-output=timetrack.sh
+output=timetrack-src.sh
 
 ## script
 

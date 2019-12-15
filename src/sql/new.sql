@@ -3,7 +3,7 @@ table structure:
 
 |users  |  |projects |  |timekeepings                                      |
 |id|name|  |id|name  |  |id|project_id|user_id|activity|start_time|end_time|
- ^^     ^^--------------^^     ^^
+ ^^         ^^--------------^^         ^^
   \\----------------------------------//
 */
 
@@ -95,3 +95,4 @@ create trigger if not exists tg_insert_timekeep
         NEW.activity
     );
   end
+

@@ -27,7 +27,7 @@ insert into ttchangelogs (version_id, devname, description, object_type, object)
 create table if not exists tasks (
     id integer primary key autoincrement,
     description blob not null unique,
-    shortname varchar(255) unique,     -- should default to task#id if not specified.
+    shortname varchar(255) unique,     -- should default to task.id if not specified.
     created_at datetime not null default current_timestamp
 );
 insert into ttchangelogs (version_id, devname, description, object_type, object) values

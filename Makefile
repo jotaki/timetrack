@@ -14,4 +14,7 @@ clean:
 	@make -C src clean
 	@rm -fv bin/timetrack timetrack
 
+sourcable:
+	@make -C sourcable
+
 reset: clean timetrack
